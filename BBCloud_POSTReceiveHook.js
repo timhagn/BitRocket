@@ -1,3 +1,5 @@
+/*jshint esversion: 6 */
+
 const config = {
     color: '#225159'
 };
@@ -23,96 +25,86 @@ const showNotifications = {
     pullrequest_comment_updated: true
 };
 
+function get_basic_info(request) {
+  const author = {
+      displayname: request.content.actor.display_name,
+      link: request.content.actor.links.html,
+      avatar: request.content.actor.links.avatar.href
+  };
+  const repository = {
+      name: request.content.repository.full_name,
+      link: request.content.repository.links.html.href
+  };
+  return {
+      author: author,
+      repository: repository
+  };
+}
+
+function create_attachement(author, text){
+    const attachment = {
+        author_name: author.displayname,
+        author_link: author.link,
+        author_icon: author.avatar,
+        text: text
+    };
+    return attachment;
+}
+
 const processors = {
     push(request) {
-        const author = {
-            username: request.content.actor.username,
-            displayname: request.content.actor.display_name
-        };
-        const repository = {
-            name: request.content.repository.full_name,
-            branch: request.content.repository.name,
-            message: request.content.push.changes[0].new.target.message
-        };
-        const links = {
-            self: request.content.push.changes[0].new.target.links.self.href
-        };
+        const info = get_basic_info(request);
+        const commits = request.content.push.changes[0].commits;
+
         let text = '';
-        text += author.displayname + ' (@' + author.username + ') pushed changes:\n';
-        text += '=> ' + repository.name + '/' + repository.branch + '\n';
-        text += repository.message + '\n';
-        const attachment = {
-            author_icon: 'http://plainicon.com/dboard/userprod/2800_a1826/prod_thumb/plainicon.com-50220-512px-3ba.png',
-            author_name: repository.name + '/' + repository.branch,
-            author_link: links.self
-        };
+        text += "On repository " + "[" + info.repository.name + "]" + "(" + info.repository.link + ")" + ": " + "\n";
+        for (let commit of commits) {
+            text += "*Pushed* " + "[" + commit.hash.toString().substring(0,6) + "]" + "(" + commit.links.html.href + ")" + ": " + commit.message;
+        }
+
         return {
             content: {
-                text: text,
-                attachments: [attachment],
+                attachments: [create_attachement(info.author, text)],
                 parseUrls: false,
-                color: ((config['color'] != '') ? '#' + config['color'].replace('#', '') : '#225159')
+                color: ((config.color !== '') ? '#' + config.color.replace('#', '') : '#225159')
             }
         };
     },
 
     fork(request) {
-        const author = {
-            username: request.content.actor.username,
-            displayname: request.content.actor.display_name
-        };
-        const repository = {
-            name: request.content.repository.full_name,
-            fork: request.content.fork.full_name
-        };
-        const links = {
-            self: request.content.repository.links.self.href
-        };
+        const info = get_basic_info(request);
+
+        const fork_name = request.content.fork.full_name;
+        const fork_link = request.content.fork.links.html.href;
+
         let text = '';
-        text += author.displayname + ' (@' + author.username + ') forked repo ' + repository.name + ':\n';
-        text += repository.name + ' => ' + repository.fork + '\n';
-        const attachment = {
-            author_icon: 'http://plainicon.com/dboard/userprod/2800_a1826/prod_thumb/plainicon.com-47820-512px-db2.png',
-            author_name: repository.name + '/' + repository.branch,
-            author_link: links.self
-        };
+        text += "On repository " + "[" + info.repository.name + "]" + "(" + info.repository.link + ")" + ": " + "\n";
+        text += "*Forked* to " + "[" + fork_name + "]" + "(" + fork_link + ")" + "\n";
+
         return {
             content: {
-                text: text,
-                attachments: [attachment],
+                attachments: [create_attachement(info.author, text)],
                 parseUrls: false,
-                color: ((config['color'] != '') ? '#' + config['color'].replace('#', '') : '#225159')
+                color: ((config.color !== '') ? '#' + config.color.replace('#', '') : '#225159')
             }
         };
     },
 
     comment(request) {
-        const author = {
-            username: request.content.comment.user.username,
-            displayname: request.content.comment.user.display_name
-        };
-        const comment = {
-            text: request.content.comment.content.raw,
-            repo: request.content.repository.full_name,
-            path: request.content.comment.inline.path
-        };
-        const links = {
-            self: request.content.comment.links.self.href
-        };
+        const info = get_basic_info(request);
+
+        const commit = request.content.comment.commit;
+        const comment = request.content.comment;
+
         let text = '';
-        text += author.displayname + ' (@' + author.username + ') commented on commit:\n';
-        text += comment.text + '\n';
-        const attachment = {
-            author_icon: 'http://plainicon.com/dboard/userprod/2802_db2aa/prod_thumb/plainicon.com-39439-512px.png',
-            author_name: comment.repo + '/' + comment.path,
-            author_link: links.self
-        };
+        text += "On repository " + "[" + info.repository.name + "]" + "(" + info.repository.link + ")" + ": " + "\n";
+        text += "*Commented* " + "[" + commit.hash.toString().substring(0,6) + "]" + "(" + commit.links.html.href + ")" + ": " + comment.content.raw + "\n";
+
         return {
             content: {
-                text: text,
-                attachments: [attachment],
+                attachments: [create_attachement(info.author, text)],
                 parseUrls: false,
-                color: ((config['color'] != '') ? '#' + config['color'].replace('#', '') : '#225159')
+                color: ((config.color !== '') ? '#' + config.color.replace('#', '') : '#225159')
             }
         };
     },
@@ -145,26 +137,25 @@ const processors = {
         text += 'Description:\n';
         text += pullrequest.description + '\n';
         let actions = 'Actions:';
-        if(showLinks['decline']) {
+        if(showLinks.decline) {
             actions += ' | [decline](' + links.decline + ')';
         }
-        if(showLinks['approve']) {
+        if(showLinks.approve) {
             actions += ' | [approve](' + links.approve + ')';
         }
-        if(showLinks['merge']) {
+        if(showLinks.merge) {
             actions += ' | [merge](' + links.merge + ')';
         }
-        if(showLinks['commits']) {
+        if(showLinks.commits) {
             actions += ' | [view commits](' + links.commits + ')';
         }
-        if(showLinks['comments']) {
+        if(showLinks.comments) {
             actions += ' | [view comments](' + links.comments + ')';
         }
         if(actions != 'Actions:') {
             text += actions;
         }
         const attachment = {
-            author_icon: 'http://plainicon.com/dboard/userprod/2800_a1826/prod_thumb/plainicon.com-50223-512px-5be.png',
             author_name: '#' + pullrequest.id + ' - ' + pullrequest.title,
             author_link: links.self
         };
@@ -173,7 +164,7 @@ const processors = {
                 text: text,
                 attachments: [attachment],
                 parseUrls: false,
-                color: ((config['color'] != '') ? '#' + config['color'].replace('#', '') : '#225159')
+                color: ((config.color !== '') ? '#' + config.color.replace('#', '') : '#225159')
             }
         };
     },
@@ -197,7 +188,6 @@ const processors = {
         text += 'Reason:\n';
         text += pullrequest.reason + '\n';
         const attachment = {
-            author_icon: 'http://plainicon.com/dboard/userprod/2800_a1826/prod_thumb/plainicon.com-50223-512px-5be.png',
             author_name: 'DECLINED: ' + pullrequest.title
         };
         return {
@@ -205,7 +195,7 @@ const processors = {
                 text: text,
                 attachments: [attachment],
                 parseUrls: false,
-                color: ((config['color'] != '') ? '#' + config['color'].replace('#', '') : '#225159')
+                color: ((config.color !== '') ? '#' + config.color.replace('#', '') : '#225159')
             }
         };
     },
@@ -226,12 +216,11 @@ const processors = {
         let text = '';
         text += author.displayname + ' (@' + author.username + ') merged a pull request:\n';
         text += pullrequest.sourcerepo + '/' + pullrequest.sourcebranch + ' => ' + pullrequest.destinationrepo + '/' + pullrequest.destinationbranch + '\n';
-        if(pullrequest.description != '') {
+        if(pullrequest.description !== '') {
             text += 'Description:\n';
             text += pullrequest.description + '\n';
         }
         const attachment = {
-            author_icon: 'http://plainicon.com/dboard/userprod/2800_a1826/prod_thumb/plainicon.com-50223-512px-5be.png',
             author_name: 'MERGED: ' + pullrequest.title
         };
         return {
@@ -239,7 +228,7 @@ const processors = {
                 text: text,
                 attachments: [attachment],
                 parseUrls: false,
-                color: ((config['color'] != '') ? '#' + config['color'].replace('#', '') : '#225159')
+                color: ((config.color !== '') ? '#' + config.color.replace('#', '') : '#225159')
             }
         };
     },
@@ -258,12 +247,11 @@ const processors = {
         let text = '';
         text += author.displayname + ' (@' + author.username + ') updated a pull request:\n';
         text += pullrequest.sourcebranch + ' => ' + pullrequest.destinationbranch + '\n';
-        if(pullrequest.description != '') {
+        if(pullrequest.description !== '') {
             text += 'Description:\n';
             text += pullrequest.description + '\n';
         }
         const attachment = {
-            author_icon: 'http://plainicon.com/dboard/userprod/2800_a1826/prod_thumb/plainicon.com-50223-512px-5be.png',
             author_name: 'UPDATED: ' + pullrequest.title
         };
         return {
@@ -271,7 +259,7 @@ const processors = {
                 text: text,
                 attachments: [attachment],
                 parseUrls: false,
-                color: ((config['color'] != '') ? '#' + config['color'].replace('#', '') : '#225159')
+                color: ((config.color !== '') ? '#' + config.color.replace('#', '') : '#225159')
             }
         };
     },
@@ -291,7 +279,6 @@ const processors = {
         text += 'Comment:\n';
         text += comment.text + '\n';
         const attachment = {
-            author_icon: 'http://plainicon.com/dboard/userprod/2802_db2aa/prod_thumb/plainicon.com-39439-512px.png',
             author_name: '#' + comment.id,
             author_link: comment.link
         };
@@ -300,7 +287,7 @@ const processors = {
                 text: text,
                 attachments: [attachment],
                 parseUrls: false,
-                color: ((config['color'] != '') ? '#' + config['color'].replace('#', '') : '#225159')
+                color: ((config.color !== '') ? '#' + config.color.replace('#', '') : '#225159')
             }
         };
     },
@@ -320,7 +307,6 @@ const processors = {
         text += 'Comment:\n';
         text += comment.text + '\n';
         const attachment = {
-            author_icon: 'http://plainicon.com/dboard/userprod/2802_db2aa/prod_thumb/plainicon.com-39439-512px.png',
             author_name: '#' + comment.id,
             author_link: comment.link
         };
@@ -329,7 +315,7 @@ const processors = {
                 text: text,
                 attachments: [attachment],
                 parseUrls: false,
-                color: ((config['color'] != '') ? '#' + config['color'].replace('#', '') : '#225159')
+                color: ((config.color !== '') ? '#' + config.color.replace('#', '') : '#225159')
             }
         };
     },
@@ -349,7 +335,6 @@ const processors = {
         text += 'Comment:\n';
         text += comment.text + '\n';
         const attachment = {
-            author_icon: 'http://plainicon.com/dboard/userprod/2802_db2aa/prod_thumb/plainicon.com-39439-512px.png',
             author_name: '#' + comment.id,
             author_link: comment.link
         };
@@ -358,7 +343,7 @@ const processors = {
                 text: text,
                 attachments: [attachment],
                 parseUrls: false,
-                color: ((config['color'] != '') ? '#' + config['color'].replace('#', '') : '#225159')
+                color: ((config.color !== '') ? '#' + config.color.replace('#', '') : '#225159')
             }
         };
     }
@@ -372,17 +357,15 @@ class Script {
         var result = {
             error: {
                 success: false,
-                message: 'Something went wrong before processing started...'
+                message: 'Something went wrong before processing started or the handling of this type of trigger is not implemented. Please consider to disable the trigger or send a bug report.'
             }
         };
 
-        const firstKey = Object.keys(request.content)[0];
-
-        //console.log(request, firstKey);
-
-        if (showNotifications[firstKey] === true) {
-            //console.log('right before', processors[firstKey](request));
-            result = processors[firstKey](request);
+        let keys = Object.keys(request.content);
+        for (let key of keys) {
+            if (showNotifications[key] === true) {
+                result = processors[key](request);
+            }
         }
         return result;
     }
